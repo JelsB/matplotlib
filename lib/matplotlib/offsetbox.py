@@ -14,18 +14,14 @@ Text instance. The width and height of the TextArea instance is the
 width and height of the its child text.
 """
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
-import six
-from six.moves import zip
-
 import warnings
+
+import numpy as np
+
 import matplotlib.transforms as mtransforms
 import matplotlib.artist as martist
 import matplotlib.text as mtext
 import matplotlib.path as mpath
-import numpy as np
 from matplotlib.transforms import Bbox, BboxBase, TransformedBbox
 
 from matplotlib.font_manager import FontProperties
@@ -77,16 +73,16 @@ def _get_packed_offsets(wd_list, total, sep, mode="fixed"):
         return total, offsets
 
     elif mode == "expand":
+        # This is a bit of a hack to avoid a TypeError when *total*
+        # is None and used in conjugation with tight layout.
+        if total is None:
+            total = 1
         if len(w_list) > 1:
-            sep = (total - sum(w_list)) / (len(w_list) - 1.)
+            sep = (total - sum(w_list)) / (len(w_list) - 1)
         else:
             sep = 0
         offsets_ = np.cumsum([0] + [w + sep for w in w_list])
         offsets = offsets_[:-1]
-        # this is a bit of a hack to avoid a TypeError when used
-        # in conjugation with tight layout
-        if total is None:
-            total = 1
         return total, offsets
 
     elif mode == "equal":
@@ -183,9 +179,16 @@ class OffsetBox(martist.Artist):
 
     def set_offset(self, xy):
         """
-        Set the offset
+        Set the offset.
 
-        accepts x, y, tuple, or a callable object.
+        Parameters
+        ----------
+        xy : (float, float) or callable
+            The (x,y) coordinates of the offset in display units.
+            A callable must have the signature::
+
+                def offset(width, height, xdescent, ydescent, renderer) \
+-> (float, float)
         """
         self._offset = xy
         self.stale = True
@@ -606,9 +609,12 @@ class DrawingArea(OffsetBox):
 
     def set_offset(self, xy):
         """
-        set offset of the container.
+        Set the offset of the container.
 
-        Accept : tuple of x,y coordinate in display units.
+        Parameters
+        ----------
+        xy : (float, float)
+            The (x,y) coordinates of the offset in display units.
         """
         self._offset = xy
 
@@ -777,9 +783,12 @@ class TextArea(OffsetBox):
 
     def set_offset(self, xy):
         """
-        set offset of the container.
+        Set the offset of the container.
 
-        Accept : tuple of x,y coordinates in display units.
+        Parameters
+        ----------
+        xy : (float, float)
+            The (x,y) coordinates of the offset in display units.
         """
         self._offset = xy
 
@@ -846,7 +855,7 @@ class TextArea(OffsetBox):
 
 class AuxTransformBox(OffsetBox):
     """
-    Offset Box with the aux_transform . Its children will be
+    Offset Box with the aux_transform. Its children will be
     transformed with the aux_transform first then will be
     offseted. The absolute coordinate of the aux_transform is meaning
     as it will be automatically adjust so that the left-lower corner
@@ -895,9 +904,12 @@ class AuxTransformBox(OffsetBox):
 
     def set_offset(self, xy):
         """
-        set offset of the container.
+        Set the offset of the container.
 
-        Accept : tuple of x,y coordinate in display units.
+        Parameters
+        ----------
+        xy : (float, float)
+            The (x,y) coordinates of the offset in display units.
         """
         self._offset = xy
 
@@ -1016,7 +1028,7 @@ class AnchoredOffsetbox(OffsetBox):
         self.set_bbox_to_anchor(bbox_to_anchor, bbox_transform)
         self.set_child(child)
 
-        if isinstance(loc, six.string_types):
+        if isinstance(loc, str):
             try:
                 loc = self.codes[loc]
             except KeyError:
@@ -1298,9 +1310,12 @@ class OffsetImage(OffsetBox):
 
 #     def set_offset(self, xy):
 #         """
-#         set offset of the container.
-
-#         Accept : tuple of x,y coordinate in display units.
+#         Set the offset of the container.
+#
+#         Parameters
+#         ----------
+#         xy : (float, float)
+#             The (x,y) coordinates of the offset in display units.
 #         """
 #         self._offset = xy
 
@@ -1619,8 +1634,8 @@ class DraggableBase(object):
      *update_offset* places the artists simply in display
      coordinates. And *finalize_offset* recalculate their position in
      the normalized axes coordinate and set a relavant attribute.
-
     """
+
     def __init__(self, ref_artist, use_blit=False):
         self.ref_artist = ref_artist
         self.got_artist = False
@@ -1635,14 +1650,14 @@ class DraggableBase(object):
         self.cids = [c2, c3]
 
     def on_motion(self, evt):
-        if self.got_artist:
+        if self._check_still_parented() and self.got_artist:
             dx = evt.x - self.mouse_x
             dy = evt.y - self.mouse_y
             self.update_offset(dx, dy)
             self.canvas.draw()
 
     def on_motion_blit(self, evt):
-        if self.got_artist:
+        if self._check_still_parented() and self.got_artist:
             dx = evt.x - self.mouse_x
             dy = evt.y - self.mouse_y
             self.update_offset(dx, dy)
@@ -1651,7 +1666,7 @@ class DraggableBase(object):
             self.canvas.blit(self.ref_artist.figure.bbox)
 
     def on_pick(self, evt):
-        if evt.artist == self.ref_artist:
+        if self._check_still_parented() and evt.artist == self.ref_artist:
 
             self.mouse_x = evt.mouseevent.x
             self.mouse_y = evt.mouseevent.y
@@ -1672,13 +1687,20 @@ class DraggableBase(object):
             self.save_offset()
 
     def on_release(self, event):
-        if self.got_artist:
+        if self._check_still_parented() and self.got_artist:
             self.finalize_offset()
             self.got_artist = False
             self.canvas.mpl_disconnect(self._c1)
 
             if self._use_blit:
                 self.ref_artist.set_animated(False)
+
+    def _check_still_parented(self):
+        if self.ref_artist.figure is None:
+            self.disconnect()
+            return False
+        else:
+            return True
 
     def disconnect(self):
         """disconnect the callbacks"""
@@ -1749,8 +1771,7 @@ class DraggableAnnotation(DraggableBase):
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    fig = plt.figure(1)
-    fig.clf()
+    fig = plt.figure()
     ax = plt.subplot(121)
 
     #txt = ax.text(0.5, 0.5, "Test", size=30, ha="center", color="w")

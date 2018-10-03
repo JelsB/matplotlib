@@ -2,26 +2,21 @@
 # Created: 23 Sep 2005
 # Parts rewritten by Reinier Heeres <reinier@heeres.eu>
 
-from __future__ import (absolute_import, division, print_function,
-                        unicode_literals)
-
-import six
-
-import math
 import copy
 
-from matplotlib import lines as mlines, axis as maxis, patches as mpatches
-from matplotlib import rcParams
-from . import art3d
-from . import proj3d
-
 import numpy as np
+
+from matplotlib import (
+    artist, lines as mlines, axis as maxis, patches as mpatches, rcParams)
+from . import art3d, proj3d
+
 
 def get_flip_min_max(coord, index, mins, maxs):
     if coord[index] == mins[index]:
         return maxs[index]
     else:
         return mins[index]
+
 
 def move_from_center(coord, centers, deltas, axmask=(True, True, True)):
     '''Return a coordinate that is moved by "deltas" away from the center.'''
@@ -34,6 +29,7 @@ def move_from_center(coord, centers, deltas, axmask=(True, True, True)):
         else:
             coord[i] += deltas[i]
     return coord
+
 
 def tick_update_position(tick, tickxs, tickys, labelpos):
     '''Update tick line and label position and style.'''
@@ -48,6 +44,7 @@ def tick_update_position(tick, tickxs, tickys, labelpos):
     tick.tick1line.set_marker('')
     tick.tick1line.set_data(tickxs, tickys)
     tick.gridline.set_data(0, 0)
+
 
 class Axis(maxis.XAxis):
 
@@ -68,7 +65,8 @@ class Axis(maxis.XAxis):
             'color': (0.925, 0.925, 0.925, 0.5)},
     }
 
-    def __init__(self, adir, v_intervalx, d_intervalx, axes, *args, **kwargs):
+    def __init__(self, adir, v_intervalx, d_intervalx, axes, *args,
+                 rotate_label=None, **kwargs):
         # adir identifies which axes this is
         self.adir = adir
         # data and viewing intervals for this direction
@@ -112,7 +110,7 @@ class Axis(maxis.XAxis):
                  })
 
         maxis.XAxis.__init__(self, axes, *args, **kwargs)
-        self.set_rotate_label(kwargs.get('rotate_label', None))
+        self.set_rotate_label(rotate_label)
 
     def init3d(self):
         self.line = mlines.Line2D(
@@ -156,7 +154,7 @@ class Axis(maxis.XAxis):
 
     def set_pane_pos(self, xys):
         xys = np.asarray(xys)
-        xys = xys[:,:2]
+        xys = xys[:, :2]
         self.pane.xy = xys
         self.stale = True
 
@@ -222,6 +220,7 @@ class Axis(maxis.XAxis):
 
         renderer.close_group('pane3d')
 
+    @artist.allow_rasterization
     def draw(self, renderer):
         self.label._transform = self.axes.transData
         renderer.open_group('axis3d')
@@ -299,7 +298,7 @@ class Axis(maxis.XAxis):
                                               renderer.M)
         self.label.set_position((tlx, tly))
         if self.get_rotate_label(self.label.get_text()):
-            angle = art3d.norm_text_angle(math.degrees(math.atan2(dy, dx)))
+            angle = art3d.norm_text_angle(np.rad2deg(np.arctan2(dy, dx)))
             self.label.set_rotation(angle)
         self.label.set_va(info['label']['va'])
         self.label.set_ha(info['label']['ha'])
@@ -322,7 +321,7 @@ class Axis(maxis.XAxis):
             pos[0], pos[1], pos[2], renderer.M)
         self.offsetText.set_text(self.major.formatter.get_offset())
         self.offsetText.set_position((olx, oly))
-        angle = art3d.norm_text_angle(math.degrees(math.atan2(dy, dx)))
+        angle = art3d.norm_text_angle(np.rad2deg(np.arctan2(dy, dx)))
         self.offsetText.set_rotation(angle)
         # Must set rotation mode to "anchor" so that
         # the alignment point is used as the "fulcrum" for rotation.
@@ -465,17 +464,21 @@ class Axis(maxis.XAxis):
         # doesn't return junk info.
         return None
 
+
 # Use classes to look at different data limits
+
 
 class XAxis(Axis):
     def get_data_interval(self):
         'return the Interval instance for this axis data limits'
         return self.axes.xy_dataLim.intervalx
 
+
 class YAxis(Axis):
     def get_data_interval(self):
         'return the Interval instance for this axis data limits'
         return self.axes.xy_dataLim.intervaly
+
 
 class ZAxis(Axis):
     def get_data_interval(self):

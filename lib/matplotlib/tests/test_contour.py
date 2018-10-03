@@ -1,13 +1,11 @@
-from __future__ import absolute_import, division, print_function
-
 import datetime
 
 import numpy as np
 from matplotlib.testing.decorators import image_comparison
 from matplotlib import pyplot as plt
 from numpy.testing import assert_array_almost_equal
+from matplotlib.colors import LogNorm
 import pytest
-import warnings
 
 
 def test_contour_shape_1d_valid():
@@ -16,8 +14,7 @@ def test_contour_shape_1d_valid():
     y = np.arange(9)
     z = np.random.random((9, 10))
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    fig, ax = plt.subplots()
     ax.contour(x, y, z)
 
 
@@ -28,8 +25,7 @@ def test_contour_shape_2d_valid():
     xg, yg = np.meshgrid(x, y)
     z = np.random.random((9, 10))
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    fig, ax = plt.subplots()
     ax.contour(xg, yg, z)
 
 
@@ -39,8 +35,7 @@ def test_contour_shape_mismatch_1():
     y = np.arange(9)
     z = np.random.random((9, 10))
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    fig, ax = plt.subplots()
 
     with pytest.raises(TypeError) as excinfo:
         ax.contour(x, y, z)
@@ -53,8 +48,7 @@ def test_contour_shape_mismatch_2():
     y = np.arange(10)
     z = np.random.random((9, 10))
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    fig, ax = plt.subplots()
 
     with pytest.raises(TypeError) as excinfo:
         ax.contour(x, y, z)
@@ -68,8 +62,7 @@ def test_contour_shape_mismatch_3():
     xg, yg = np.meshgrid(x, y)
     z = np.random.random((9, 10))
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    fig, ax = plt.subplots()
 
     with pytest.raises(TypeError) as excinfo:
         ax.contour(xg, y, z)
@@ -86,8 +79,7 @@ def test_contour_shape_mismatch_4():
     b = np.random.random((9, 9))
     z = np.random.random((9, 10))
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    fig, ax = plt.subplots()
 
     with pytest.raises(TypeError) as excinfo:
         ax.contour(b, g, z)
@@ -106,8 +98,7 @@ def test_contour_shape_invalid_1():
     y = np.random.random((3, 3, 3))
     z = np.random.random((9, 10))
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    fig, ax = plt.subplots()
 
     with pytest.raises(TypeError) as excinfo:
         ax.contour(x, y, z)
@@ -120,8 +111,7 @@ def test_contour_shape_invalid_2():
     y = np.random.random((3, 3, 3))
     z = np.random.random((3, 3, 3))
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    fig, ax = plt.subplots()
 
     with pytest.raises(TypeError) as excinfo:
         ax.contour(x, y, z)
@@ -137,6 +127,17 @@ def test_contour_empty_levels():
     with pytest.warns(UserWarning) as record:
         ax.contour(x, x, z, levels=[])
     assert len(record) == 1
+
+
+def test_contour_Nlevels():
+    # A scalar levels arg or kwarg should trigger auto level generation.
+    # https://github.com/matplotlib/matplotlib/issues/11913
+    z = np.arange(12).reshape((3, 4))
+    fig, ax = plt.subplots()
+    cs1 = ax.contour(z, 5)
+    assert len(cs1.levels) > 1
+    cs2 = ax.contour(z, levels=5)
+    assert (cs1.levels == cs2.levels).all()
 
 
 def test_contour_badlevel_fmt():
@@ -225,7 +226,7 @@ def test_given_colors_levels_and_extends():
 
 
 @image_comparison(baseline_images=['contour_datetime_axis'],
-                  extensions=['png'], remove_text=False)
+                  extensions=['png'], remove_text=False, style='mpl20')
 def test_contour_datetime_axis():
     fig = plt.figure()
     fig.subplots_adjust(hspace=0.4, top=0.98, bottom=.15)
@@ -251,7 +252,7 @@ def test_contour_datetime_axis():
 
 
 @image_comparison(baseline_images=['contour_test_label_transforms'],
-                  extensions=['png'], remove_text=True)
+                  extensions=['png'], remove_text=True, style='mpl20')
 def test_labels():
     # Adapted from pylab_examples example code: contour_demo.py
     # see issues #2475, #2843, and #2818 for explanation
@@ -367,3 +368,36 @@ def test_circular_contour_warning():
         cs = plt.contour(x, y, r)
         plt.clabel(cs)
     assert len(record) == 0
+
+
+@image_comparison(baseline_images=['contour_log_extension'],
+                  extensions=['png'], remove_text=True, style='mpl20')
+def test_contourf_log_extension():
+    # Test that contourf with lognorm is extended correctly
+    fig = plt.figure(figsize=(10, 5))
+    fig.subplots_adjust(left=0.05, right=0.95)
+    ax1 = fig.add_subplot(131)
+    ax2 = fig.add_subplot(132)
+    ax3 = fig.add_subplot(133)
+
+    # make data set with large range e.g. between 1e-8 and 1e10
+    data_exp = np.linspace(-7.5, 9.5, 1200)
+    data = np.power(10, data_exp).reshape(30, 40)
+    # make manual levels e.g. between 1e-4 and 1e-6
+    levels_exp = np.arange(-4., 7.)
+    levels = np.power(10., levels_exp)
+
+    # original data
+    c1 = ax1.contourf(data,
+                      norm=LogNorm(vmin=data.min(), vmax=data.max()))
+    # just show data in levels
+    c2 = ax2.contourf(data, levels=levels,
+                      norm=LogNorm(vmin=levels.min(), vmax=levels.max()),
+                      extend='neither')
+    # extend data from levels
+    c3 = ax3.contourf(data, levels=levels,
+                      norm=LogNorm(vmin=levels.min(), vmax=levels.max()),
+                      extend='both')
+    plt.colorbar(c1, ax=ax1)
+    plt.colorbar(c2, ax=ax2)
+    plt.colorbar(c3, ax=ax3)
